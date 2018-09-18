@@ -37,7 +37,7 @@ import java.sql.*;
 
 public class Recievemail {
 
-    public static void AutomatedMail(String username, String password) {
+    public static void AutomatedMail(String username, String password, String ehost, String pdfLocation, String desktopEmail, String accountingEmail) {
         while (true) {
             try {
                 Properties properties = new Properties();
@@ -45,7 +45,7 @@ public class Recievemail {
                 Session emailSession = Session.getDefaultInstance(properties);
                 Store emailStore = emailSession.getStore();
                 //(host, username, password)
-                emailStore.connect("imap.gmail.com", username, password); // change the gmail to the correct email.
+                emailStore.connect("imap."+ehost+".com", username, password); // change the gmail to the correct email.
                 // get inbox folder
                 Folder emailFolder = emailStore.getFolder("INBOX");
                 emailFolder.open(Folder.READ_WRITE);
@@ -54,7 +54,7 @@ public class Recievemail {
                 try {
 
                     Class.forName("com.mysql.jdbc.Driver");
-                    Connection con = DriverManager.getConnection("jdbc:mysql://localhost:3306/V2?autoReconnect=true&useSSL=false", "root", "1234");
+                    Connection con = DriverManager.getConnection("jdbc:mysql://localhost:3306/V3?autoReconnect=true&useSSL=false", "root", "1234");
                     Statement stmt = con.createStatement();
                     ResultSet rs = stmt.executeQuery("select * from emp");
 
@@ -103,12 +103,29 @@ public class Recievemail {
                                 String emailAddress = s.substring(s.indexOf("<") + 1, s.indexOf(">"));// prints what is in between the two <>
                                 System.out.println(emailAddress);
 
+                                //separates the info
+                                String string = en;
+                                String[] parts = string.split("(?<=\n)");
+                                DateFormat dateFormated = new SimpleDateFormat("MM/dd/YYYY");// EE is for the day of the week.EEEE is for full day name
+                                Calendar todayD = Calendar.getInstance();
+                                todayD.set(Calendar.HOUR_OF_DAY, 0);
+                                String theeDate = dateFormated.format(todayD.getTime());
 
                                 //inserts employee number and employee email into database
-                                String query = "insert into emp(Employee, EmployeeEmail)" + "values(?,?)";
+                                String query = "insert into emp(Employee, EmployeeEmail, EmployeeName, StartDate, Department, JobClassification, Supervisor, Computer, DataBaseEntryDate)" + "values(?,?,?,?,?,?,?,?,?)";
                                 PreparedStatement preparedStmt = con.prepareStatement(query);
                                 preparedStmt.setInt(1, empNum);
                                 preparedStmt.setString(2, emailAddress);
+                                preparedStmt.setString(3, parts[1]);
+                                preparedStmt.setString(4, parts[2]);
+                                preparedStmt.setString(5, parts[3]);
+                                preparedStmt.setString(6, parts[4]);
+                                preparedStmt.setString(7, parts[5]);
+                                preparedStmt.setString(8, parts[6]);
+
+
+                                preparedStmt.setString(9,theeDate);
+
                                 preparedStmt.execute();
                                 System.out.println("Added new Employee");
 
@@ -125,7 +142,7 @@ public class Recievemail {
 
 
                                 // SMTP info
-                                String host = "smtp.gmail.com";
+                                String host = "smtp."+ehost+".com";
                                 String port = "465";
                                 String mailFrom = username;                //username
                                 String passwords = password;                        //password
@@ -155,23 +172,28 @@ public class Recievemail {
 
                                 // message info
                                 String mailTo = emailAddress;
-                                String Desktop = "ryan.hong@sjsu.edu"; // Desktop "Change the email in this line to the email of the desktop"
+                                String Desktop = desktopEmail; // Desktop "Change the email in this line to the email of the desktop"
                                 String subject = "New Employee Laptop Request Confirmation Email DO_NOT_REPLY";
                                 String Subject2 = "New Employee Laptop Request " + newEn;
                                 String Estimated = ("Your request has been sent to " + Desktop + ". Estimated Delivery Date is: " + newDate + ".");
                                 String messagess = Estimated;
-                                String Desktop = "ryan.hong@sjsu.edu";
+                                String desktop = desktopEmail;
                                 String messagesss = "";
                                 String Messages1 = "Employee notified that request has been sent on: " + theDate + ". The Employee is also notified that the estimated Delivery date is: " + newDate;
-                                String Messages2 = "EMPLOYEE: ";
+                                String Messages2 = parts[1];
+                                String Messages3 = parts[2];
+                                String Messages4 = parts[3];
+                                String Messages5 = parts[4];
+                                String Messages6 = parts[5];
+                                String Messages7 = parts[6];
                                 // attachments
                                 String[] attachFiles = new String[1];
-                                attachFiles[0] = "C:/Users/Ryan Hong/AutomatedEmail/" + "Employee_Request_" + newEn + ".pdf"; //location of pdf
+                                attachFiles[0] = pdfLocation+ "Employee_Request_" + newEn + ".pdf"; //location of pdf
                                 try {
                                     sendEmailWithAttachments(host, port, mailFrom, passwords, mailTo,
                                             subject, messagess, messagesss, attachFiles);
-                                    sendEmailWithAttachments2(host, port, mailFrom, passwords, Desktop,
-                                            Subject2, Messages1, Messages2, attachFiles, empNum);
+                                    sendEmailWithAttachments2(host, port, mailFrom, passwords, desktop,
+                                            Subject2, Messages1, Messages2, Messages3, Messages4, Messages5, Messages6, Messages7, attachFiles, empNum);
                                 } catch (Exception ex) {
                                     ex.printStackTrace();
                                 }
@@ -181,9 +203,12 @@ public class Recievemail {
 
                         if (message.getSubject().contains("Re: NEW EMPLOYEE LAPTOP REQUEST") || message.getSubject().contains("Re: New Employee Laptop Request")) {
 
-
                             String dd = (String) bp.getContent();
-                            String deliveryDate = dd.substring(s.indexOf("DELIVERY DATE: ") + 32, dd.indexOf("DELIVERY DATE: ") + 27);
+                            String[] partz = dd.split("(?<=\n)");
+                            String deliveryDate = partz[7];
+
+
+                            //String deliveryDate = dd.substring(s.indexOf("DELIVERY DATE: ") , dd.indexOf("DELIVERY DATE: "+11));
                             final String newDelivery = addPeriods(stripNonDigits(deliveryDate));
 
                             //System.out.println(newDelivery);
@@ -194,15 +219,15 @@ public class Recievemail {
                             AssetPdf(assetPDFname, (String) bp.getContent(), assetPDFname);
                             // make asset pdf for accounting and send to accounting
                             // asset pdf must be named "employee number + delivery date" i.e. 95131-20170515
-                            String host = "smtp.gmail.com";
+                            String host = "smtp."+ehost+".com";
                             String port = "465";
                             String mailFrom = username;                //username
                             String passwords = password;
-                            String mailTo = "ryanhhong@outlook.com"; // Accounting
+                            String mailTo = accountingEmail; // Accounting
                             String subject = "Employee laptop request asset pdf";
                             String messagess = "Asset PDF for accounting";
                             String[] attachFiles = new String[1];
-                            attachFiles[0] = "C:/Users/Ryan Hong/AutomatedEmail/" + assetPDFname + ".pdf ";
+                            attachFiles[0] = pdfLocation + assetPDFname + ".pdf ";
                             sendEmailWithAttachments(host, port, mailFrom, passwords, mailTo, subject, messagess, "", attachFiles);
                             //  message.setFlag(Flags.Flag.DELETED, true); this was used for deleting mail
                         }
@@ -347,7 +372,7 @@ public class Recievemail {
     }
 
     public static void sendEmailWithAttachments2(String host, String port, final String userName, final String password,
-                                                 String toAddress, String subject, String message, String message2, String[] attachFiles,int EMP)
+                                                 String toAddress, String subject, String message, String message2, String message3, String message4, String message5, String message6, String message7, String[] attachFiles,int EMP)
             throws AddressException, MessagingException {
         // sets SMTP server properties
         Properties properties = new Properties();
@@ -387,32 +412,34 @@ public class Recievemail {
         MimeBodyPart messageBodyPart2 = new MimeBodyPart();
         MimeBodyPart messageBodyPart3 = new MimeBodyPart();
         messageBodyPart3.setContent("EMPLOYEE: "+EMP, "text/html");
-        messageBodyPart2.setContent("EMPLOYEE NAME: ", "text/html");
+        messageBodyPart2.setContent(message2, "text/html");
         MimeBodyPart messageBodyPart4 = new MimeBodyPart();
         messageBodyPart4.setContent("DELIVERY DATE: ", "text/html");
         MimeBodyPart messageBodyPart5 = new MimeBodyPart();
-        messageBodyPart5.setContent("START DATE: ", "text/html");
+        messageBodyPart5.setContent(message3, "text/html");
         MimeBodyPart messageBodyPart6 = new MimeBodyPart();
-        messageBodyPart6.setContent("DEPARTMENT: ", "text/html");
+        messageBodyPart6.setContent(message4, "text/html");
         MimeBodyPart messageBodyPart7 = new MimeBodyPart();
-        messageBodyPart7.setContent("JOB CLASSIFICATION: ", "text/html");
+        messageBodyPart7.setContent(message5, "text/html");
         MimeBodyPart messageBodyPart8 = new MimeBodyPart();
-        messageBodyPart8.setContent("SUPERVISOR: ", "text/html");
+        messageBodyPart8.setContent(message6, "text/html");
         MimeBodyPart messageBodyPart9 = new MimeBodyPart();
-        messageBodyPart9.setContent("COMPUTER: ", "text/html");
+        messageBodyPart9.setContent(message7,"text/html");
 
         // creates multi-part
         Multipart multipart = new MimeMultipart();
         multipart.addBodyPart(messageBodyPart3);
         multipart.addBodyPart(messageBodyPart2);
-        multipart.addBodyPart(messageBodyPart4);
+
         multipart.addBodyPart(messageBodyPart5);
         multipart.addBodyPart(messageBodyPart6);
         multipart.addBodyPart(messageBodyPart7);
         multipart.addBodyPart(messageBodyPart8);
         multipart.addBodyPart(messageBodyPart9);
+        multipart.addBodyPart(messageBodyPart4);
         multipart.addBodyPart(gap);
         multipart.addBodyPart(messageBodyPart);
+
 
         // adds attachments
         if (attachFiles != null && attachFiles.length > 0) {
@@ -438,7 +465,7 @@ public class Recievemail {
     }
 
     public static void main(String args[]) {
-        AutomatedMail("zkm7184@gmail.com", "ThePassword!");
+        AutomatedMail("~Main Email to automate~", "The password to main email","gmail","C:/Users/Ryan Hong/AutomatedEmail/", "~insert desktop email~","~Insert Accounting Email~"); // when putting in the pdfLocation make sure you end with a slash.
 
     }
 }
